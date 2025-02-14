@@ -14,6 +14,7 @@ ctk.set_default_color_theme("blue")
 
 app = ctk.CTk()
 app.title("Screen Capture & Recorder")
+#window resizable
 app.resizable(False,False)
 
 # Window dimensions
