@@ -5,76 +5,60 @@ import cv2
 import numpy as np
 import pyautogui
 import pyaudio
-import wave
 import customtkinter as ctk
 from PIL import ImageGrab
-import subprocess
 
-# Create the main application window
+# Initialize main application window
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("blue")
+
 app = ctk.CTk()
-app.title("Screen Capture Tool")
+app.title("Screen Capture & Recorder")
+app.resizable(False,False)
 
-# Get screen width and height
-screen_width = app.winfo_screenwidth()
-screen_height = app.winfo_screenheight()
-
-# Set window size
-window_width = 600
-window_height = 500
-
-# Calculate position to center the window
-position_x = (screen_width - window_width) // 2
-position_y = (screen_height - window_height) // 2
-
+# Window dimensions
+window_width, window_height = 600, 550
+screen_width, screen_height = app.winfo_screenwidth(), app.winfo_screenheight()
+position_x, position_y = (screen_width - window_width) // 2, (screen_height - window_height) // 2
 app.geometry(f"{window_width}x{window_height}+{position_x}+{position_y}")
 
-# Folders for screenshots and videos
-screenshot_folder = "cap_img"
-video_folder = "Screen-Video"
+# Create necessary folders
+screenshot_folder, video_folder = "cap_img", "Screen-Video"
 os.makedirs(screenshot_folder, exist_ok=True)
 os.makedirs(video_folder, exist_ok=True)
 
-capture_interval = 5  # Default interval in seconds
-capturing = False  # Flag to control capturing
-recording = False  # Flag to control recording
+capture_interval, capturing, recording = 5, False, False
 
 def capture_full_screen():
     global capturing
     while capturing:
         screenshot = ImageGrab.grab()
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        file_name = os.path.join(screenshot_folder, f"1-{timestamp}.png")
+        file_name = os.path.join(screenshot_folder, f"1-{time.strftime('%Y%m%d_%H%M%S')}.png")
         screenshot.save(file_name)
         time.sleep(capture_interval)
 
-def start_capture():
+def toggle_capture():
     global capturing
-    if not capturing:
-        capturing = True
+    capturing = not capturing
+    if capturing:
         threading.Thread(target=capture_full_screen, daemon=True).start()
-        app.iconify()  # Minimize the window when capture starts
+        app.iconify()
 
 def stop_capture():
     global capturing
     capturing = False
 
-def increase_time():
+def change_interval(delta):
     global capture_interval
-    capture_interval += 5
+    capture_interval = max(5, capture_interval + delta)
     time_label.configure(text=f"Interval: {capture_interval} sec")
 
-def decrease_time():
-    global capture_interval
-    if capture_interval > 5:
-        capture_interval -= 5
-        time_label.configure(text=f"Interval: {capture_interval} sec")
-
-def record_screen():
+def toggle_recording():
     global recording
-    if not recording:
-        recording = True
+    recording = not recording
+    if recording:
         threading.Thread(target=record_video_audio, daemon=True).start()
-        app.iconify()  # Minimize the window when recording starts
+        app.iconify()
 
 def stop_recording():
     global recording
@@ -82,95 +66,43 @@ def stop_recording():
 
 def record_video_audio():
     global recording
-    timestamp = time.strftime("%Y%m%d_%H%M%S")
-    video_filename = os.path.join(video_folder, f"temp_video-{timestamp}.avi")
-    audio_filename = os.path.join(video_folder, f"temp_audio-{timestamp}.wav")
-    final_output = os.path.join(video_folder, f"record-{timestamp}.mp4")
-    
-    screen_size = (screen_width, screen_height)
-    fourcc = cv2.VideoWriter_fourcc(*"XVID")
-    out = cv2.VideoWriter(video_filename, fourcc, 20.0, screen_size)
-    
+    video_filename = os.path.join(video_folder, f"record-{time.strftime('%Y%m%d_%H%M%S')}.mp4")
+    out = cv2.VideoWriter(video_filename, cv2.VideoWriter_fourcc(*"mp4v"), 20.0, (screen_width, screen_height))
     audio = pyaudio.PyAudio()
     stream = audio.open(format=pyaudio.paInt16, channels=1, rate=44100, input=True, frames_per_buffer=1024)
     
-    audio_frames = []
-
     while recording:
-        # Capture video frame
-        img = pyautogui.screenshot()
-        frame = np.array(img)
-        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        frame = cv2.cvtColor(np.array(pyautogui.screenshot()), cv2.COLOR_RGB2BGR)
         out.write(frame)
-
-        # Capture audio frame
-        audio_data = stream.read(1024)
-        audio_frames.append(audio_data)
-        time.sleep(0.05)
+        stream.read(1024)
     
     out.release()
     stream.stop_stream()
     stream.close()
     audio.terminate()
 
-    # Save audio to WAV file
-    wf = wave.open(audio_filename, 'wb')
-    wf.setnchannels(1)
-    wf.setsampwidth(audio.get_sample_size(pyaudio.paInt16))
-    wf.setframerate(44100)
-    wf.writeframes(b''.join(audio_frames))
-    wf.close()
+# UI Layout
+ctk.CTkLabel(app, text="Screen Capture & Recorder", font=("Arial", 20, "bold"), text_color="#58a6ff").pack(pady=15)
 
-    # Combine video and audio using FFmpeg
-    merge_video_audio(video_filename, audio_filename, final_output)
+time_label = ctk.CTkLabel(app, text=f"Interval: {capture_interval} sec", font=("Arial", 16))
+time_label.pack(pady=5)
 
-    # Clean up temporary files
-    os.remove(video_filename)
-    os.remove(audio_filename)
+button_frame = ctk.CTkFrame(app)
+button_frame.pack(pady=20, padx=20, fill="both", expand=True)
 
-def merge_video_audio(video_file, audio_file, output_file):
-    command = [
-        'ffmpeg',
-        '-i', video_file,
-        '-i', audio_file,
-        '-c:v', 'copy',
-        '-c:a', 'aac',
-        '-strict', 'experimental',
-        output_file
-    ]
-    
-    try:
-        subprocess.run(command, check=True)
-        print(f"Recording saved as {output_file}")
-    except subprocess.CalledProcessError as e:
-        print(f"Error merging video and audio: {e}")
+buttons = [
+    ("Start Capture", lambda: toggle_capture(), "#238636"),
+    ("Stop Capture", lambda: stop_capture(), "#da3633"),
+    ("Increase Interval", lambda: change_interval(5), "#8957e5"),
+    ("Decrease Interval", lambda: change_interval(-5), "#d29922"),
+    ("Start Recording", lambda: toggle_recording(), "#0078D7"),
+    ("Stop Recording", lambda: stop_recording(), "#FF5733"),
+]
 
-# UI Elements
-time_label = ctk.CTkLabel(app, text=f"Interval: {capture_interval} sec", font=("Arial", 16, "bold"), text_color="#58a6ff")
-time_label.pack(pady=20)
-
-start_button = ctk.CTkButton(app, text="Start Capture", command=start_capture, font=("Arial", 14, "bold"),
-                              fg_color="#238636", text_color="white", hover_color="#2a9d60", width=250, height=35)
-start_button.pack(pady=10)
-
-stop_button = ctk.CTkButton(app, text="Stop Capture", command=stop_capture, font=("Arial", 14, "bold"),
-                             fg_color="#da3633", text_color="white", hover_color="#e84a47", width=250, height=35)
-stop_button.pack(pady=10)
-
-increase_button = ctk.CTkButton(app, text="Increase Interval", command=increase_time, font=("Arial", 14, "bold"),
-                                fg_color="#8957e5", text_color="white", hover_color="#9b6bf5", width=250, height=35)
-increase_button.pack(pady=10)
-
-decrease_button = ctk.CTkButton(app, text="Decrease Interval", command=decrease_time, font=("Arial", 14, "bold"),
-                                fg_color="#d29922", text_color="white", hover_color="#f7b34c", width=250, height=35)
-decrease_button.pack(pady=10)
-
-record_button = ctk.CTkButton(app, text="Record Window Screen", command=record_screen, font=("Arial", 14, "bold"),
-                              fg_color="#0078D7", text_color="white", hover_color="#3399FF", width=250, height=35)
-record_button.pack(pady=10)
-
-stop_record_button = ctk.CTkButton(app, text="Stop Window Screen", command=stop_recording, font=("Arial", 14, "bold"),
-                                   fg_color="#FF5733", text_color="white", hover_color="#FF704D", width=250, height=35)
-stop_record_button.pack(pady=10)
+for i in range(0, len(buttons), 2):
+    row_frame = ctk.CTkFrame(button_frame)
+    row_frame.pack(pady=5)
+    for text, command, color in buttons[i:i+2]:
+        ctk.CTkButton(row_frame, text=text, command=command, fg_color=color, width=250, height=40).pack(side="left", padx=10)
 
 app.mainloop()
