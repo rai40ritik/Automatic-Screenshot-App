@@ -102,7 +102,7 @@ buttons = [
 
 for i in range(0, len(buttons), 2):
     row_frame = ctk.CTkFrame(button_frame)
-    row_frame.pack(pady=5)
+    row_frame.pack(pady=10)
     for text, command, color in buttons[i:i+2]:
         ctk.CTkButton(row_frame, text=text, command=command, fg_color=color, width=250, height=40).pack(side="left", padx=10)
 
